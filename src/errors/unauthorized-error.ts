@@ -1,0 +1,11 @@
+import { STATUS_UNAUTHORIZED } from '../utils/constants';
+
+class UnauthorizedError extends Error {
+  statusCode: number;
+
+  constructor(message: string) {
+    super(message);
+    this.statusCode = STATUS_UNAUTHORIZED;
+  }
+}
+export default UnauthorizedError;

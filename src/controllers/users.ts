@@ -1,51 +1,87 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import User from '../models/user';
+import NotFoundError from '../errors/not-found-error';
+import { STATUS_OK, STATUS_CREATED } from '../utils/constants';
 
-export const getUsers = async (req: Request, res: Response) => {
+const { JWT_SECRET = 'secret-key' } = process.env;
+
+export const createUser = async (req: Request, res: Response, next: NextFunction) => {
+  const {
+    name, about, avatar, email, password,
+  } = req.body;
+
   try {
-    const users = await User.find({});
-    res.status(200).json(users);
+    const newUser = await User.create({
+      name, about, avatar, email, password,
+    });
+    const { password: _, ...userWithoutPassword } = newUser.toObject();
+    return res.status(STATUS_CREATED).json(userWithoutPassword);
   } catch (err) {
-    res.status(500).json({ message: 'Ошибка сервера' });
+    return next(err);
   }
 };
 
-export const getUserById = async (req: Request, res: Response) => {
+export const login = async (req: Request, res: Response, next: NextFunction) => {
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findUserByCredentials(email, password);
+    const token = jwt.sign({ _id: user._id }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.cookie('jwt', token, {
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'strict',
+    });
+
+    return res.status(STATUS_OK).json({ message: 'Успешный вход' });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const getUsers = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const users = await User.find({});
+    return res.status(STATUS_OK).json(users);
+  } catch (err) {
+    return next(err);
+  }
+};
+
+export const getUserById = async (req: Request, res: Response, next: NextFunction) => {
   const { userId } = req.params;
+
   try {
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'Пользователь не найден' });
+      throw new NotFoundError('Пользователь не найден');
     }
-    return res.status(200).json(user);
-  } catch (err: unknown) {
-    if (err instanceof Error) {
-      if (err.name === 'CastError') {
-        return res.status(400).json({ message: 'Некорректный _id' });
-      }
-    }
-    return res.status(500).json({ message: 'Ошибка сервера' });
+    return res.status(STATUS_OK).json(user);
+  } catch (err) {
+    return next(err);
   }
 };
 
-export const createUser = async (req: Request, res: Response) => {
-  const { name, about, avatar } = req.body;
+export const getCurrentUser = async (req: Request, res: Response, next: NextFunction) => {
+  const userId = req.user._id;
+
   try {
-    const newUser = await User.create({ name, about, avatar });
-    return res.status(201).json(newUser);
-  } catch (err: unknown) {
-    if (err instanceof Error) {
-      if (err.name === 'ValidationError') {
-        return res.status(400).json({ message: 'Переданы некорректные данные' });
-      }
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new NotFoundError('Пользователь не найден');
     }
-    return res.status(500).json({ message: 'Ошибка сервера' });
+    return res.status(STATUS_OK).json(user);
+  } catch (err) {
+    return next(err);
   }
 };
 
-export const updateProfile = async (req: Request, res: Response) => {
+export const updateProfile = async (req: Request, res: Response, next: NextFunction) => {
   const { name, about } = req.body;
   const userId = req.user._id;
+
   try {
     const updatedUser = await User.findByIdAndUpdate(
       userId,
@@ -53,22 +89,18 @@ export const updateProfile = async (req: Request, res: Response) => {
       { new: true, runValidators: true },
     );
     if (!updatedUser) {
-      return res.status(404).json({ message: 'Пользователь не найден' });
+      throw new NotFoundError('Пользователь не найден');
     }
-    return res.status(200).json(updatedUser);
-  } catch (err: unknown) {
-    if (err instanceof Error) {
-      if (err.name === 'ValidationError') {
-        return res.status(400).json({ message: 'Переданы некорректные данные' });
-      }
-    }
-    return res.status(500).json({ message: 'Ошибка сервера' });
+    return res.status(STATUS_OK).json(updatedUser);
+  } catch (err) {
+    return next(err);
   }
 };
 
-export const updateAvatar = async (req: Request, res: Response) => {
+export const updateAvatar = async (req: Request, res: Response, next: NextFunction) => {
   const { avatar } = req.body;
   const userId = req.user._id;
+
   try {
     const updatedUser = await User.findByIdAndUpdate(
       userId,
@@ -76,15 +108,10 @@ export const updateAvatar = async (req: Request, res: Response) => {
       { new: true, runValidators: true },
     );
     if (!updatedUser) {
-      return res.status(404).json({ message: 'Пользователь не найден' });
+      throw new NotFoundError('Пользователь не найден');
     }
-    return res.status(200).json(updatedUser);
-  } catch (err: unknown) {
-    if (err instanceof Error) {
-      if (err.name === 'ValidationError') {
-        return res.status(400).json({ message: 'Переданы некорректные данные' });
-      }
-    }
-    return res.status(500).json({ message: 'Ошибка сервера' });
+    return res.status(STATUS_OK).json(updatedUser);
+  } catch (err) {
+    return next(err);
   }
 };
